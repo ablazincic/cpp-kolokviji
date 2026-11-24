@@ -155,7 +155,7 @@ li{margin:4px 0}
   <div class="title"><span class="logo">C++</span><b>C++ Kolokviji</b><span>— Kolokvij.cpp</span><span class="sp"></span><span id="eng-st" class="pill">g++ spreman</span></div>
   <div class="tb"><div id="prog" aria-hidden="true"></div>
     <button class="btn run" id="build" title="Ctrl+Enter"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z"/></svg>Gotov sam — kompajliraj <kbd>Ctrl+Enter</kbd></button>
-    <button class="btn" id="paperBtn" aria-pressed="false" title="Bez boja i bez automatskog uvlačenja, kao na papiru">Papir način</button>
+    <button class="btn" id="paperBtn" aria-pressed="false" title="Uključi boje sintakse i automatsko uvlačenje kao u Visual Studiju">Visual Studio boje</button>
     <select id="eng" aria-label="Kompajler"><option value="ce">g++ · Compiler Explorer</option><option value="wb">g++ · Wandbox</option></select>
     <span class="sp"></span>
     <button class="btn" id="clear">Očisti kôd</button>
@@ -216,7 +216,7 @@ li{margin:4px 0}
       </div>
     </aside>
   </div>
-  <div class="status" id="status"><span id="st">Spremno</span><span id="lc">Ln 1, Col 1</span><span id="tm">0:00</span><span class="sp"></span><span>C++17 · Papir: <span id="pst">isključen</span></span></div>
+  <div class="status" id="status"><span id="st">Spremno</span><span id="lc">Ln 1, Col 1</span><span id="tm">0:00</span><span class="sp"></span><span>C++17 · Način: <span id="pst">papir</span></span></div>
 </div>
 <script>
 {
@@ -263,7 +263,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
-let diags = [], paper = store.get('cpp.paper', false), busy = false, sampleP;
+let diags = [], paper = store.get('cpp.mode', 'paper') === 'paper', busy = false, sampleP;
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function wrap(cls, t) { return t.split('\n').map(p => p ? `<span class="${cls}">${esc(p)}</span>` : '').join('\n'); }
@@ -407,10 +407,10 @@ for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('c
 
 function setPaper(on) {
   paper = on;
-  store.set('cpp.paper', on);
+  store.set('cpp.mode', on ? 'paper' : 'vs');
   $('#app').classList.toggle('paper', on);
-  $('#paperBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
-  $('#pst').textContent = on ? 'uključen' : 'isključen';
+  $('#paperBtn').setAttribute('aria-pressed', on ? 'false' : 'true');
+  $('#pst').textContent = on ? 'papir' : 'Visual Studio';
   render();
 }
 $('#paperBtn').addEventListener('click', () => setPaper(!paper));

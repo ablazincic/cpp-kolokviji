@@ -6,7 +6,7 @@ Napiši rješenje na papiru, prepiši ga ovdje i klikni **Gotov sam — kompajli
 
 - Popis grešaka s kratkim objašnjenjem na hrvatskom
 - Ulaz (stdin) za `cin`
-- Papir način: bez boja i automatskog uvlačenja
+- Papir način po defaultu (bez boja i automatskog uvlačenja), a gumb „Visual Studio boje” pali klasične VS boje
 - Timer za simulaciju kolokvija (45, 60, 90 min), statistika buildova i tvoje najčešće greške
 
 Kôd se šalje na godbolt.org ili wandbox.org na kompajliranje, pa ne lijepi ništa privatno.
