@@ -7,6 +7,9 @@ Napiši rješenje na papiru, prepiši ga ovdje i klikni **Gotov sam — kompajli
 - Popis grešaka s kratkim objašnjenjem na hrvatskom
 - Slike zadatka (upload, povuci ili zalijepi), ostaju samo do osvježavanja
 - Ulaz (stdin) za `cin`
+- Testovi: ulaz + očekivani ispis, nakon svakog builda pokažu ✓ ili ✗ i gdje se ispis razlikuje
+- Preuzimanje koda kao Kolokvij.cpp (gumb ili Ctrl/⌘+S)
+- VS prečaci u Visual Studio načinu: Ctrl+/ (ili Ctrl+K, Ctrl+C / Ctrl+U) komentar, Ctrl+D dupliciraj, Alt+↑↓ pomakni liniju, Ctrl+Shift+L obriši liniju, Tab / Shift+Tab uvlačenje
 - Papir način po defaultu (bez boja i automatskog uvlačenja), a gumb „Visual Studio boje” pali klasične VS boje
 - Timer za simulaciju kolokvija (45, 60, 90 min), statistika buildova i tvoje najčešće greške
 
