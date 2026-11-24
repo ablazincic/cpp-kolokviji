@@ -139,6 +139,23 @@ li{margin:4px 0}
 .empty::before{content:'';flex:none;width:10px;height:10px;border-radius:50%;background:#555}
 .empty.good::before{background:#3fb950}
 @media(prefers-reduced-motion:reduce){#prog::after{animation:none;left:0;width:100%}}
+
+.drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px;border:1px dashed #4b4b52;border-radius:6px;text-align:center;margin-bottom:8px;transition:border-color .15s,background .15s}
+.drop.over{border-color:#8661c5;background:#2a2433}
+.imgs{display:grid;gap:8px;margin-bottom:8px}
+.imgs:empty{display:none}
+.fig2{position:relative;margin:0;border-radius:6px;overflow:hidden;background:#111;border:1px solid #333}
+.fig2 img{display:block;width:100%;max-height:300px;object-fit:contain;cursor:zoom-in}
+.fig2 button{position:absolute;top:6px;right:6px;width:30px;height:30px;border-radius:50%;border:1px solid #555;background:rgba(30,30,30,.85);color:#fff;cursor:pointer;font-size:16px;line-height:1}
+.fig2 span{position:absolute;left:6px;top:6px;font:600 11px var(--mono);background:rgba(30,30,30,.85);padding:2px 6px;border-radius:4px}
+.lb{position:fixed;inset:0;z-index:50;background:rgba(10,10,10,.92);display:flex;flex-direction:column}
+.lb[hidden]{display:none}
+.lbbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #333;background:#1f1f1f}
+.lbbar .sp{flex:1}
+.lbwrap{flex:1;overflow:auto;display:grid;place-items:center;padding:12px;min-height:0}
+.lbwrap img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in}
+.lbwrap.full{place-items:start}
+.lbwrap.full img{max-width:none;max-height:none;cursor:zoom-out}
 @media(max-width:820px){
   body{overflow:auto}
   .app{height:auto}
@@ -196,8 +213,15 @@ li{margin:4px 0}
           <div class="row"><button class="btn" id="tgo" style="flex:1;justify-content:center">Start</button><button class="btn" id="treset">Reset</button></div>
         </div>
         <div class="card">
-          <div class="ch"><h3>Zadatak</h3></div>
-          <textarea id="task" placeholder="Zalijepi zadatak sa starog kolokvija da ga imaš pred očima dok pišeš."></textarea>
+          <div class="ch"><h3>Zadatak</h3><span class="mini" id="imgCount"></span></div>
+          <div class="drop" id="drop">
+            <input type="file" id="imgIn" accept="image/*" multiple hidden>
+            <button class="btn" id="imgBtn" type="button">Dodaj sliku zadatka</button>
+            <span class="mini">ili je povuci ovdje, ili zalijepi s Cmd/Ctrl+V</span>
+          </div>
+          <div class="imgs" id="imgs"></div>
+          <textarea id="task" placeholder="Ili zalijepi tekst zadatka ovdje."></textarea>
+          <p class="mini" style="margin:6px 0 0">Slike ostaju samo dok ne osvježiš stranicu i nigdje se ne šalju.</p>
         </div>
         <div class="card">
           <div class="ch"><h3>Tvoji buildovi</h3><span class="mini" id="rate"></span></div>
@@ -215,6 +239,10 @@ li{margin:4px 0}
         <p class="note">Kompajlira pravi g++ (C++17, -Wall -Wextra) na godbolt.org ili wandbox.org. Kôd ide njima, pa ne lijepi ništa privatno.</p>
       </div>
     </aside>
+  </div>
+  <div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Slika zadatka">
+    <div class="lbbar"><span class="mini" id="lbInfo"></span><span class="sp"></span><button class="btn" id="lbZoom" type="button">Puna veličina</button><button class="btn" id="lbClose" type="button">Zatvori</button></div>
+    <div class="lbwrap" id="lbWrap"><img id="lbImg" alt="Slika zadatka"></div>
   </div>
   <div class="status" id="status"><span id="st">Spremno</span><span id="lc">Ln 1, Col 1</span><span id="tm">0:00</span><span class="sp"></span><span>C++17 · Način: <span id="pst">papir</span></span></div>
 </div>
@@ -761,6 +789,112 @@ async function build() {
 }
 $('#build').addEventListener('click', build);
 
+
+
+const imgs = [];
+let lbIdx = -1;
+function renderImgs() {
+  const box = $('#imgs');
+  box.textContent = '';
+  imgs.forEach((im, i) => {
+    const f = document.createElement('figure');
+    f.className = 'fig2';
+    const img = document.createElement('img');
+    img.src = im.url;
+    img.alt = 'Slika zadatka ' + (i + 1);
+    img.addEventListener('click', () => openLb(i));
+    const n = document.createElement('span');
+    n.textContent = (i + 1) + '/' + imgs.length;
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '×';
+    x.title = 'Makni sliku';
+    x.addEventListener('click', () => {
+      URL.revokeObjectURL(im.url);
+      imgs.splice(i, 1);
+      renderImgs();
+    });
+    f.append(img, n, x);
+    box.appendChild(f);
+  });
+  if (imgs.length) {
+    $('#imgCount').textContent = imgs.length === 1 ? '1 slika' : imgs.length + ' slike';
+  } else {
+    $('#imgCount').textContent = '';
+  }
+}
+function addFiles(list) {
+  let added = 0;
+  for (const f of list) {
+    if (!f || !/^image\//.test(f.type)) continue;
+    imgs.push({ url: URL.createObjectURL(f), name: f.name || 'slika' });
+    added++;
+  }
+  if (added) renderImgs();
+  return added;
+}
+$('#imgBtn').addEventListener('click', () => $('#imgIn').click());
+$('#imgIn').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+const drop = $('#drop');
+let dragDepth = 0;
+document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+document.addEventListener('dragenter', e => {
+  if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) {
+    dragDepth++;
+    drop.classList.add('over');
+  }
+});
+document.addEventListener('dragleave', () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) drop.classList.remove('over');
+});
+document.addEventListener('drop', e => {
+  dragDepth = 0;
+  drop.classList.remove('over');
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+    e.preventDefault();
+    addFiles(e.dataTransfer.files);
+  }
+});
+document.addEventListener('paste', e => {
+  const items = e.clipboardData ? [...e.clipboardData.items] : [];
+  const files = items.filter(it => it.kind === 'file' && /^image\//.test(it.type)).map(it => it.getAsFile());
+  if (files.length) {
+    e.preventDefault();
+    addFiles(files);
+  }
+});
+function openLb(i) {
+  lbIdx = i;
+  $('#lbImg').src = imgs[i].url;
+  $('#lbInfo').textContent = 'Slika ' + (i + 1) + ' od ' + imgs.length + (imgs.length > 1 ? ' · strelice za sljedeću' : '');
+  $('#lbWrap').classList.remove('full');
+  $('#lbZoom').textContent = 'Puna veličina';
+  $('#lb').hidden = false;
+  $('#lbClose').focus();
+}
+function closeLb() {
+  $('#lb').hidden = true;
+  lbIdx = -1;
+}
+function zoomLb() {
+  const w = $('#lbWrap');
+  w.classList.toggle('full');
+  $('#lbZoom').textContent = w.classList.contains('full') ? 'Prilagodi ekranu' : 'Puna veličina';
+}
+$('#lbClose').addEventListener('click', closeLb);
+$('#lbZoom').addEventListener('click', zoomLb);
+$('#lbImg').addEventListener('click', zoomLb);
+document.addEventListener('keydown', e => {
+  if (lbIdx < 0) return;
+  if (e.key === 'Escape') {
+    closeLb();
+  } else if (e.key === 'ArrowRight' && imgs.length > 1) {
+    openLb((lbIdx + 1) % imgs.length);
+  } else if (e.key === 'ArrowLeft' && imgs.length > 1) {
+    openLb((lbIdx - 1 + imgs.length) % imgs.length);
+  }
+});
 
 $('#task').addEventListener('input', () => { store.set('cpp.task', $('#task').value); });
 $('#stdin').addEventListener('input', () => { store.set('cpp.stdin', $('#stdin').value); });
