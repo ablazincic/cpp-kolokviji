@@ -5,7 +5,7 @@ Editor s bojama kao Visual Studio i pravi g++ (C++17, `-Wall -Wextra`) preko Com
 Napiši rješenje na papiru, prepiši ga ovdje i klikni **Gotov sam — kompajliraj** (Ctrl+Enter).
 
 - Popis grešaka s kratkim objašnjenjem na hrvatskom
-- Slike zadatka (upload, povuci ili zalijepi), ostaju samo do osvježavanja
+- Zadatak kao slika, PDF ili PPTX (upload, povuci ili zalijepi). Sve se otvara u browseru i nestaje na osvježavanje
 - Ulaz (stdin) za `cin`
 - Testovi: ulaz + očekivani ispis, nakon svakog builda pokažu ✓ ili ✗ i gdje se ispis razlikuje
 - Preuzimanje koda kao Kolokvij.cpp (gumb ili Ctrl/⌘+S)

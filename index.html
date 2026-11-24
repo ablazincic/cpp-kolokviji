@@ -236,15 +236,15 @@ li{margin:4px 0}
           <div class="row"><button class="btn" id="tgo" style="flex:1;justify-content:center">Start</button><button class="btn" id="treset">Reset</button></div>
         </div>
         <div class="card">
-          <div class="ch"><h3>Zadatak</h3><span class="mini" id="imgCount"></span></div>
+          <div class="ch"><h3>Zadatak</h3><span class="mini"><span id="imgCount"></span> <button class="link" id="imgClr" type="button" hidden>makni sve</button></span></div>
           <div class="drop" id="drop">
-            <input type="file" id="imgIn" accept="image/*" multiple hidden>
-            <button class="btn" id="imgBtn" type="button">Dodaj sliku zadatka</button>
-            <span class="mini">ili je povuci ovdje, ili zalijepi s Cmd/Ctrl+V</span>
+            <input type="file" id="imgIn" accept="image/*,.pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple hidden>
+            <button class="btn" id="imgBtn" type="button">Dodaj zadatak</button>
+            <span class="mini" id="dropMsg">Slika, PDF ili PPTX. Može i povući ovdje ili zalijepiti s Cmd/Ctrl+V.</span>
           </div>
           <div class="imgs" id="imgs"></div>
           <textarea id="task" placeholder="Ili zalijepi tekst zadatka ovdje."></textarea>
-          <p class="mini" style="margin:6px 0 0">Slike ostaju samo dok ne osvježiš stranicu i nigdje se ne šalju.</p>
+          <p class="mini" style="margin:6px 0 0">Datoteke se otvaraju samo u tvom browseru, nigdje se ne šalju i nestanu kad osvježiš stranicu.</p>
         </div>
         <div class="card">
           <div class="ch"><h3>Tvoji buildovi</h3><span class="mini" id="rate"></span></div>
@@ -1169,22 +1169,379 @@ function renderImgs() {
     f.append(img, n, x);
     box.appendChild(f);
   });
-  if (imgs.length) {
-    $('#imgCount').textContent = imgs.length === 1 ? '1 slika' : imgs.length + ' slike';
+  const n = imgs.length;
+  if (n) {
+    let w = 'slika';
+    if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) w = 'slike';
+    $('#imgCount').textContent = n + ' ' + w;
   } else {
     $('#imgCount').textContent = '';
   }
+  $('#imgClr').hidden = n < 2;
 }
-function addFiles(list) {
-  let added = 0;
-  for (const f of list) {
-    if (!f || !/^image\//.test(f.type)) continue;
-    imgs.push({ url: URL.createObjectURL(f), name: f.name || 'slika' });
-    added++;
+const DROP_MSG = 'Slika, PDF ili PPTX. Može i povući ovdje ili zalijepiti s Cmd/Ctrl+V.';
+const libs = {};
+function loadScript(src) {
+  if (!libs[src]) {
+    libs[src] = new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = src;
+      sc.onload = ok;
+      sc.onerror = () => { delete libs[src]; fail(new Error('Ne mogu učitati ' + src)); };
+      document.head.appendChild(sc);
+    });
   }
-  if (added) renderImgs();
-  return added;
+  return libs[src];
 }
+function msg(t) {
+  $('#dropMsg').textContent = t;
+}
+const canvasBlob = c => new Promise(ok => c.toBlob(ok, 'image/png'));
+function pushBlob(blob, name) {
+  imgs.push({ url: URL.createObjectURL(blob), name: name });
+  renderImgs();
+}
+
+async function addPdf(f) {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  const lib = window.pdfjsLib;
+  lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await lib.getDocument({ data: await f.arrayBuffer() }).promise;
+  const n = Math.min(pdf.numPages, 40);
+  for (let i = 1; i <= n; i++) {
+    msg('Učitavam ' + f.name + ' … stranica ' + i + '/' + n);
+    const page = await pdf.getPage(i);
+    const vp1 = page.getViewport({ scale: 1 });
+    const scale = Math.min(2.5, 1800 / vp1.width);
+    const vp = page.getViewport({ scale: scale });
+    const c = document.createElement('canvas');
+    c.width = Math.floor(vp.width);
+    c.height = Math.floor(vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    pushBlob(await canvasBlob(c), f.name + ' · str. ' + i);
+  }
+  return n;
+}
+
+const EMU = 12700;
+const kids = (el, name) => [...el.children].filter(x => x.localName === name);
+const kid = (el, name) => (el ? kids(el, name)[0] : null);
+function desc(el, name) {
+  if (!el) return null;
+  const all = el.getElementsByTagNameNS('*', name);
+  return all.length ? all[0] : null;
+}
+function parseXml(t) {
+  return new DOMParser().parseFromString(t, 'application/xml');
+}
+function relsMap(xmlText, baseDir) {
+  const map = {};
+  if (!xmlText) return map;
+  const doc = parseXml(xmlText);
+  for (const r of doc.getElementsByTagNameNS('*', 'Relationship')) {
+    let t = r.getAttribute('Target') || '';
+    if (r.getAttribute('TargetMode') === 'External') continue;
+    if (t.startsWith('/')) {
+      t = t.slice(1);
+    } else {
+      const parts = (baseDir + t).split('/');
+      const out = [];
+      for (const p of parts) {
+        if (p === '..') {
+          out.pop();
+        } else if (p !== '.' && p !== '') {
+          out.push(p);
+        }
+      }
+      t = out.join('/');
+    }
+    map[r.getAttribute('Id')] = t;
+  }
+  return map;
+}
+function posOf(el) {
+  const off = desc(el, 'off');
+  const ext = desc(el, 'ext');
+  return {
+    x: off ? Number(off.getAttribute('x')) || 0 : 0,
+    y: off ? Number(off.getAttribute('y')) || 0 : 1e12,
+    cx: ext ? Number(ext.getAttribute('cx')) || 0 : 0,
+    cy: ext ? Number(ext.getAttribute('cy')) || 0 : 0
+  };
+}
+function paraOf(p) {
+  let text = '';
+  let size = 0, bold = false, mono = false;
+  for (const ch of p.children) {
+    if (ch.localName === 'r' || ch.localName === 'fld') {
+      const t = kid(ch, 't');
+      if (t) text += t.textContent;
+      const rp = kid(ch, 'rPr');
+      if (rp) {
+        if (!size && rp.getAttribute('sz')) size = Number(rp.getAttribute('sz')) / 100;
+        if (rp.getAttribute('b') === '1') bold = true;
+        const lat = kid(rp, 'latin');
+        if (lat && /consol|courier|mono|code/i.test(lat.getAttribute('typeface') || '')) mono = true;
+      }
+    } else if (ch.localName === 'br') {
+      text += '\n';
+    }
+  }
+  const ppr = kid(p, 'pPr');
+  const lvl = ppr ? Number(ppr.getAttribute('lvl')) || 0 : 0;
+  const bullet = ppr && (kid(ppr, 'buChar') || kid(ppr, 'buAutoNum'));
+  return { text: text, size: size, bold: bold, mono: mono, lvl: lvl, bullet: !!bullet };
+}
+function collect(tree, items) {
+  for (const el of tree.children) {
+    const n = el.localName;
+    if (n === 'sp') {
+      const tx = kid(el, 'txBody');
+      if (!tx) continue;
+      const ph = desc(el, 'ph');
+      const isTitle = ph && /title/i.test(ph.getAttribute('type') || '');
+      const paras = kids(tx, 'p').map(paraOf);
+      const key = ph ? (ph.getAttribute('idx') ? 'i' + ph.getAttribute('idx') : 't' + (ph.getAttribute('type') || 'body')) : '';
+      const pType = ph ? 't' + (ph.getAttribute('type') || 'body') : '';
+      if (paras.some(p => p.text.trim())) items.push({ kind: 'text', pos: posOf(el), paras: paras, title: isTitle, key: key, pType: pType });
+    } else if (n === 'pic') {
+      const blip = desc(el, 'blip');
+      const id = blip ? (blip.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blip.getAttribute('r:embed')) : null;
+      if (id) items.push({ kind: 'pic', pos: posOf(el), rid: id });
+    } else if (n === 'graphicFrame') {
+      const tbl = desc(el, 'tbl');
+      if (!tbl) continue;
+      const rows = [];
+      for (const tr of tbl.getElementsByTagNameNS('*', 'tr')) {
+        const cells = [];
+        for (const tc of kids(tr, 'tc')) {
+          cells.push([...tc.getElementsByTagNameNS('*', 't')].map(t => t.textContent).join(' ').trim());
+        }
+        rows.push(cells.join('  |  '));
+      }
+      items.push({ kind: 'text', pos: posOf(el), paras: rows.map(r => ({ text: r, size: 0, bold: false, mono: true, lvl: 0, bullet: false })), title: false });
+    } else if (n === 'grpSp') {
+      const sub = [];
+      collect(el, sub);
+      const gp = posOf(el);
+      for (const s2 of sub) {
+        if (s2.pos.y === 1e12) s2.pos.y = gp.y;
+        items.push(s2);
+      }
+    }
+  }
+}
+function wrapText(ctx, text, maxW) {
+  const out = [];
+  for (const raw of text.split('\n')) {
+    const lead = raw.match(/^\s*/)[0];
+    const words = raw.slice(lead.length).split(/(\s+)/);
+    let line = lead;
+    for (const w of words) {
+      if (!w) continue;
+      const test = line + w;
+      if (ctx.measureText(test).width > maxW && line.trim()) {
+        out.push(line.replace(/\s+$/, ''));
+        line = /^\s+$/.test(w) ? '' : w;
+      } else {
+        line = test;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+async function renderSlide(items, slideCx, getImg, num, total) {
+  const W = 1600, PAD = 70;
+  const k = W / (slideCx / EMU);
+  items.sort((a, b) => (a.pos.y - b.pos.y) || (a.pos.x - b.pos.x));
+  const meas = document.createElement('canvas').getContext('2d');
+  const ops = [];
+  let y = PAD + 30;
+  for (const it of items) {
+    if (it.kind === 'pic') {
+      const img = await getImg(it.rid);
+      if (!img) {
+        ops.push({ t: 'txt', font: 'italic 24px system-ui', color: '#888', x: PAD, y: y + 24, s: '[slika u formatu koji browser ne prikazuje]' });
+        y += 50;
+        continue;
+      }
+      let w = it.pos.cx ? Math.min(W - 2 * PAD, it.pos.cx / slideCx * W) : Math.min(W - 2 * PAD, img.width);
+      w = Math.max(w, Math.min(W - 2 * PAD, 500));
+      const h = w * img.height / img.width;
+      ops.push({ t: 'img', img: img, x: PAD, y: y, w: w, h: h });
+      y += h + 24;
+    } else {
+      for (const p of it.paras) {
+        if (!p.text.trim()) {
+          y += 14;
+          continue;
+        }
+        let pt = p.size || (it.title ? 32 : 20);
+        let px = Math.max(it.title ? 34 : 22, Math.min(64, pt * k));
+        const fam = p.mono ? 'Consolas, "Courier New", monospace' : 'system-ui, -apple-system, "Segoe UI", sans-serif';
+        const font = ((p.bold || it.title) ? '600 ' : '') + px + 'px ' + fam;
+        meas.font = font;
+        const indent = p.lvl * 40 + (p.bullet ? 34 : 0);
+        const lines = wrapText(meas, p.text, W - 2 * PAD - indent);
+        const lh = px * 1.35;
+        lines.forEach((ln, i) => {
+          if (i === 0 && p.bullet) ops.push({ t: 'txt', font: font, color: '#555', x: PAD + p.lvl * 40, y: y + px, s: '•' });
+          ops.push({ t: 'txt', font: font, color: '#111', x: PAD + indent, y: y + px, s: ln });
+          y += lh;
+        });
+        y += 6;
+      }
+      y += 18;
+    }
+  }
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = Math.max(Math.ceil(y + PAD), Math.round(W * 9 / 16));
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#999';
+  ctx.font = '20px system-ui, sans-serif';
+  ctx.fillText('Slajd ' + num + ' / ' + total, PAD, 50);
+  ctx.textBaseline = 'alphabetic';
+  for (const o of ops) {
+    if (o.t === 'img') {
+      ctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+    } else {
+      ctx.font = o.font;
+      ctx.fillStyle = o.color;
+      ctx.fillText(o.s, o.x, o.y);
+    }
+  }
+  return canvasBlob(c);
+}
+async function addPptx(f) {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  const zip = await window.JSZip.loadAsync(await f.arrayBuffer());
+  const read = p => (zip.file(p) ? zip.file(p).async('string') : Promise.resolve(null));
+  const presXml = await read('ppt/presentation.xml');
+  if (!presXml) throw new Error('nije PPTX');
+  const pres = parseXml(presXml);
+  const sz = desc(pres, 'sldSz');
+  const slideCx = sz ? Number(sz.getAttribute('cx')) : 12192000;
+  const prels = relsMap(await read('ppt/_rels/presentation.xml.rels'), 'ppt/');
+  let paths = [];
+  for (const sid of pres.getElementsByTagNameNS('*', 'sldId')) {
+    const rid = sid.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || sid.getAttribute('r:id');
+    if (prels[rid]) paths.push(prels[rid]);
+  }
+  if (!paths.length) {
+    paths = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p)).sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
+  }
+  const n = Math.min(paths.length, 80);
+  for (let i = 0; i < n; i++) {
+    msg('Učitavam ' + f.name + ' … slajd ' + (i + 1) + '/' + n);
+    const p = paths[i];
+    const dir = p.slice(0, p.lastIndexOf('/') + 1);
+    const doc = parseXml(await read(p));
+    const relsXml = await read(dir + '_rels/' + p.slice(dir.length) + '.rels');
+    const rels = relsMap(relsXml, dir);
+    const tree = desc(doc, 'spTree');
+    const items = [];
+    if (tree) collect(tree, items);
+    if (items.some(it => it.pos.y === 1e12)) {
+      const lay = relOfType(relsXml, dir, 'slideLayout');
+      let lmap = {}, mmap = {};
+      if (lay) {
+        const ldir = lay.slice(0, lay.lastIndexOf('/') + 1);
+        lmap = await phMap(read, lay);
+        const lrels = await read(ldir + '_rels/' + lay.slice(ldir.length) + '.rels');
+        const mas = relOfType(lrels, ldir, 'slideMaster');
+        if (mas) mmap = await phMap(read, mas);
+      }
+      for (const it of items) {
+        if (it.pos.y !== 1e12 || it.kind !== 'text') continue;
+        const found = lmap[it.key] || lmap[it.pType] || mmap[it.pType] || mmap[it.key];
+        if (found) {
+          it.pos = found;
+        } else if (it.title) {
+          it.pos = { x: 0, y: -1, cx: 0, cy: 0 };
+        }
+      }
+    }
+    const getImg = async rid => {
+      const path = rels[rid];
+      if (!path || !zip.file(path) || /\.(emf|wmf|svg)$/i.test(path)) return null;
+      try {
+        return await createImageBitmap(await zip.file(path).async('blob'));
+      } catch (e) {
+        return null;
+      }
+    };
+    pushBlob(await renderSlide(items, slideCx, getImg, i + 1, n), f.name + ' · slajd ' + (i + 1));
+  }
+  return n;
+}
+
+async function phMap(read, path) {
+  const map = {};
+  const xml = await read(path);
+  if (!xml) return map;
+  const doc = parseXml(xml);
+  for (const sp of doc.getElementsByTagNameNS('*', 'sp')) {
+    const ph = desc(sp, 'ph');
+    const off = desc(sp, 'off');
+    if (!ph || !off) continue;
+    const pos = posOf(sp);
+    if (ph.getAttribute('idx')) map['i' + ph.getAttribute('idx')] = pos;
+    const tk = 't' + (ph.getAttribute('type') || 'body');
+    if (!map[tk]) map[tk] = pos;
+  }
+  return map;
+}
+function relOfType(xmlText, baseDir, type) {
+  if (!xmlText) return null;
+  const doc = parseXml(xmlText);
+  for (const r of doc.getElementsByTagNameNS('*', 'Relationship')) {
+    if ((r.getAttribute('Type') || '').endsWith('/' + type)) {
+      return relsMap(xmlText, baseDir)[r.getAttribute('Id')];
+    }
+  }
+  return null;
+}
+let queue = Promise.resolve();
+function addFiles(list) {
+  const files = [...list];
+  queue = queue.then(async () => {
+    for (const f of files) {
+      if (!f) continue;
+      const name = (f.name || '').toLowerCase();
+      try {
+        if (/^image\//.test(f.type)) {
+          pushBlob(f, f.name || 'slika');
+        } else if (f.type === 'application/pdf' || name.endsWith('.pdf')) {
+          await addPdf(f);
+        } else if (name.endsWith('.pptx')) {
+          await addPptx(f);
+        } else if (name.endsWith('.ppt')) {
+          msg('Stari .ppt format ne mogu otvoriti. Spremi ga kao .pptx ili PDF.');
+          continue;
+        } else {
+          msg('Ova vrsta datoteke nije podržana. Može slika, PDF ili PPTX.');
+          continue;
+        }
+        msg(DROP_MSG);
+      } catch (e) {
+        msg('Nisam uspio otvoriti ' + (f.name || 'datoteku') + '. ' + (e && e.message ? e.message : ''));
+      }
+    }
+  });
+  return files.length;
+}
+$('#imgClr').addEventListener('click', () => {
+  for (const im of imgs) URL.revokeObjectURL(im.url);
+  imgs.length = 0;
+  renderImgs();
+});
 $('#imgBtn').addEventListener('click', () => $('#imgIn').click());
 $('#imgIn').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
 const drop = $('#drop');
