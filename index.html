@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C++ vježbaonica</title>
+<meta name="description" content="Vježbanje C++ za kolokvij: editor kao Visual Studio i pravi g++.">
+<style>
+/* VOICE: tiho, radno, kao IDE u 23h prije kolokvija
+   IDEA: prozor Visual Studija — editor, Error List, Output, status bar
+   PICTURE: sam editor s VS dark bojama sintakse, preko cijelog prvog ekrana
+   COLOUR and TYPE: VS dark (#1e1e1e, #569cd6, #4ec9b0, #d69d85), plavi status bar; Cascadia/Consolas + Segoe UI
+   LAYOUT: editor lijevo, zadatak desno (kao Solution Explorer), paneli dolje; na mobitelu sve jedno ispod drugog */
+:root{color-scheme:dark;--lh:20px;--fs:14px;--mono:'Cascadia Mono','Cascadia Code',Consolas,'SF Mono',Menlo,monospace;--ui:'Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif;--bg:#1e1e1e;--chrome:#1f1f1f;--panel:#252526;--line:#333;--ink:#dcdcdc;--dim:#9d9d9d;--acc:#007acc;--err:#f14c4c;--warn:#57a64a}
+:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--chrome);color:var(--ink);font:13px/1.45 var(--ui);overflow:hidden}
+button,select{font:inherit;color:var(--ink)}
+button:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+.app{height:100dvh;min-height:540px;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
+.title{display:flex;align-items:center;gap:10px;padding:6px 12px;background:#181818;border-bottom:1px solid #2b2b2b;font-size:12px;color:var(--dim)}
+.logo{width:20px;height:20px;border-radius:4px;background:#68217a;color:#fff;font:700 9px/20px var(--ui);text-align:center;flex:none}
+.title b{color:var(--ink);font-weight:600}
+.tb{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 10px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 12px;border:1px solid #3f3f46;border-radius:4px;background:#2d2d30;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#3e3e42}
+.btn[disabled]{opacity:.55;cursor:progress}
+.btn.run{background:#2d2d30;border-color:#4b4b52;font-weight:600}
+.btn.run svg{fill:#5fd068}
+.btn[aria-pressed=true]{background:#094771;border-color:#1c97ea}
+kbd{font:11px var(--mono);color:var(--dim);border:1px solid #444;border-radius:3px;padding:0 4px}
+.sp{flex:1}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:minmax(0,1fr) 240px;grid-template-areas:"ed side" "bot side";min-height:0}
+.ed{grid-area:ed;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--bg);min-height:0}
+.ftab{display:flex;background:var(--chrome);border-bottom:1px solid var(--line)}
+.ftab span{padding:6px 14px;background:var(--bg);border-top:2px solid #8661c5;font-size:12px}
+.code{position:relative;display:flex;overflow:hidden;min-height:0}
+.gut{width:54px;flex:none;overflow:hidden;color:#6e7681;text-align:right;font:var(--fs)/var(--lh) var(--mono);user-select:none}
+#gutin{padding:8px 12px 8px 0;will-change:transform}
+#gutin div{height:var(--lh);position:relative}
+#gutin div.cur{color:#c6c6c6}
+#gutin div.e::before,#gutin div.w::before{content:'';position:absolute;left:8px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--err)}
+#gutin div.w::before{background:var(--warn)}
+.area{position:relative;flex:1;overflow:hidden}
+.area pre,.area textarea{position:absolute;inset:0;margin:0;padding:8px 12px;font:var(--fs)/var(--lh) var(--mono);tab-size:4;white-space:pre;border:0;letter-spacing:0;word-spacing:0}
+.area pre{overflow:hidden;color:var(--ink);pointer-events:none}
+#hlin{will-change:transform}
+.L{height:var(--lh)}
+#cur{position:absolute;left:0;right:0;height:var(--lh);border:1px solid #3a3a3a;pointer-events:none}
+textarea#src{background:transparent;color:transparent;caret-color:#fff;resize:none;outline:none;overflow:auto;z-index:1}
+textarea#src::selection{background:#264f78;color:transparent}
+.k{color:#569cd6}.c{color:#d8a0df}.t{color:#4ec9b0}.f{color:#dcdcaa}.v{color:#9cdcfe}.s{color:#d69d85}.n{color:#b5cea8}.m{color:#57a64a}.p{color:#9b9b9b}.o{color:#b4b4b4}
+.L.e>:not(.o){text-decoration:underline wavy var(--err) 1px;text-underline-offset:4px}
+.L.w>:not(.o){text-decoration:underline wavy var(--warn) 1px;text-underline-offset:4px}
+.paper .area pre span{color:var(--ink)}
+.paper #cur{display:none}
+.bot{grid-area:bot;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--panel);border-top:1px solid var(--line);min-height:0}
+.tabs{display:flex;flex-wrap:wrap;background:var(--chrome);border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;padding:7px 14px;cursor:pointer;color:var(--dim);border-bottom:2px solid transparent;min-height:34px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:#8661c5;background:var(--panel)}
+.pane{overflow:auto;min-height:0}
+.pane[hidden]{display:none}
+table{width:100%;border-collapse:collapse}
+th{position:sticky;top:0;background:#2d2d30;text-align:left;font-weight:400;color:var(--dim);padding:5px 10px;border-bottom:1px solid var(--line)}
+td{padding:6px 10px;border-bottom:1px solid #2d2d2d;vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#2a2d2e}
+td.ln{text-align:right;font-family:var(--mono);color:var(--dim);white-space:nowrap}
+.ic{width:14px;height:14px;border-radius:50%;display:inline-block;background:var(--err);color:#fff;font:700 10px/14px var(--ui);text-align:center}
+.ic.w{background:#cca700;color:#111;border-radius:2px}
+.msg{font-family:var(--mono);font-size:12.5px}
+.hr{color:var(--dim);margin-top:2px}
+.empty{color:var(--dim);padding:12px}
+#out,#exp{margin:0;padding:10px 12px;font:12.5px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+#out .ok{color:#89d185}#out .bad{color:var(--err)}#out .d{color:var(--dim)}#out .prog{color:#fff;background:#0c0c0c;display:block;padding:8px 10px;margin:6px 0;border-left:3px solid #8661c5}
+.inp{display:flex;flex-direction:column;height:100%;padding:10px;gap:6px}
+.inp textarea,#task{flex:1;width:100%;min-height:80px;background:var(--bg);color:var(--ink);border:1px solid #3f3f46;border-radius:3px;padding:8px;font:13px/1.5 var(--mono);resize:none}
+.side{grid-area:side;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.ph{padding:7px 12px;background:var(--chrome);border-bottom:1px solid var(--line);font-size:12px;color:var(--dim)}
+.sb{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:6px}
+select{background:#2d2d30;border:1px solid #3f3f46;border-radius:4px;min-height:34px;padding:0 8px;font-size:13px}
+#task{flex:none;height:220px;font-family:var(--ui);font-size:13.5px}
+.lab{font-size:12px;color:var(--dim);margin-bottom:4px}
+#exp{background:#0c0c0c;border-radius:3px}
+ul{margin:0;padding-left:18px}
+li{margin:4px 0}
+.note{margin:auto 0 0;font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:10px}
+.log li{display:flex;gap:10px;list-style:none;margin:0;padding:6px 10px;border-bottom:1px solid #2d2d2d}
+.log ul{padding:0}
+.log b{font-family:var(--mono);color:#ce9178;min-width:3em;text-align:right}
+.status{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center;padding:3px 12px;background:var(--acc);color:#fff;font-size:12px}
+.status button{background:none;border:0;color:#fff;cursor:pointer;padding:0;font-size:12px}
+@media(max-width:820px){
+  body{overflow:auto}
+  .app{height:auto}
+  .main{grid-template-columns:minmax(0,1fr);grid-template-rows:62vh 300px auto;grid-template-areas:"ed" "bot" "side"}
+  .side{border-left:0;border-top:1px solid var(--line)}
+  .btn,select,.tabs button{min-height:44px}
+  .gut{width:42px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="title"><span class="logo">C++</span><b>Kolokvij.cpp</b><span>— C++ vježbaonica</span></div>
+  <div class="tb">
+    <button class="btn run" id="build" title="Ctrl+Enter"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z"/></svg>Gotov sam — kompajliraj <kbd>Ctrl+Enter</kbd></button>
+    <button class="btn" id="paperBtn" aria-pressed="false" title="Bez boja i bez automatskog uvlačenja, kao na papiru">Papir način</button>
+    <select id="eng" aria-label="Kompajler"><option value="ce">g++ · Compiler Explorer</option><option value="wb">g++ · Wandbox</option></select>
+    <span class="sp"></span>
+    <button class="btn" id="clear">Očisti kôd</button>
+  </div>
+  <div class="main">
+    <section class="ed">
+      <div class="ftab"><span>Kolokvij.cpp</span></div>
+      <div class="code">
+        <div class="gut"><div id="gutin"></div></div>
+        <div class="area">
+          <pre id="hl" aria-hidden="true"><div id="cur"></div><div id="hlin"></div></pre>
+          <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="C++ kôd"></textarea>
+        </div>
+      </div>
+    </section>
+    <section class="bot">
+      <div class="tabs" role="tablist">
+        <button role="tab" data-p="perr" aria-selected="true">Popis grešaka (<span id="ecount">0</span>)</button>
+        <button role="tab" data-p="pout" aria-selected="false">Izlaz</button>
+        <button role="tab" data-p="pin" aria-selected="false">Ulaz (stdin)</button>
+        <button role="tab" data-p="plog" aria-selected="false">Moje greške</button>
+      </div>
+      <div class="pane" id="perr">
+        <table><thead><tr><th style="width:28px"></th><th>Opis</th><th style="width:80px;text-align:right">Linija</th></tr></thead><tbody id="elist"></tbody></table>
+        <div class="empty" id="eempty">Još nema provjere. Napiši kôd pa klikni „Gotov sam — kompajliraj”.</div>
+      </div>
+      <div class="pane" id="pout" hidden><pre id="out"><span class="d">Izlaz programa pojavit će se ovdje.</span></pre></div>
+      <div class="pane" id="pin" hidden><div class="inp"><div class="lab">Što bi korisnik upisao (za cin). Svaka vrijednost u svoj red ili odvojeno razmakom.</div><textarea id="stdin" spellcheck="false" placeholder="npr.&#10;Ana 62&#10;3"></textarea></div></div>
+      <div class="pane log" id="plog" hidden><ul id="logl"></ul><div style="padding:8px 10px"><button class="btn" id="logclr">Očisti popis</button></div></div>
+    </section>
+    <aside class="side">
+      <div class="ph">Zadatak</div>
+      <div class="sb">
+        <textarea id="task" placeholder="Zalijepi zadatak sa starog kolokvija da ga imaš pred očima dok pišeš."></textarea>
+        <div><div class="lab">Kako vježbati</div><ul>
+          <li>Prvo riješi zadatak na papiru, bez gledanja.</li>
+          <li>Prepiši ga ovdje točno kako si napisao i kompajliraj.</li>
+          <li>Svaka greška ovdje je greška koju bi napravio i na kolokviju. Skupljaju se u „Moje greške”.</li>
+          <li>Upali Papir način i timer za pravu simulaciju.</li>
+        </ul></div>
+        <p class="note">Kôd kompajlira pravi g++ (C++17, -Wall -Wextra) na Compiler Exploreru (godbolt.org) ili Wandboxu. Kôd se šalje njima na kompajliranje, pa ne lijepi ništa privatno.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="status"><span id="st">Spremno</span><span id="lc">Ln 1, Col 1</span><button id="tm" title="Klikni za reset">Vrijeme: 0:00</button><span class="sp"></span><span>C++17 · Papir: <span id="pst">isključen</span></span></div>
+</div>
+<script>
+{
+const $ = s => document.querySelector(s);
+const ta = $('#src'), hlin = $('#hlin'), gutin = $('#gutin'), cur = $('#cur');
+const LH = 20, PAD = 8;
+const KW = new Set('int char bool double float void long short unsigned signed const static class struct public private protected virtual override new delete this true false nullptr using namespace template typename auto friend operator enum sizeof inline explicit mutable default final constexpr'.split(' '));
+const CT = new Set('if else for while do return break continue switch case try catch throw goto'.split(' '));
+const TY = new Set('std string vector map set list pair array ostream istream size_t unique_ptr shared_ptr fstream ifstream ofstream stringstream exception runtime_error'.split(' '));
+const START = `#include <iostream>
+#include <string>
+using namespace std;
+
+// Primjer — obriši i piši svoje rješenje
+class Student {
+private:
+    string ime;
+    int bodovi;
+public:
+    Student(string ime, int bodovi) : ime(ime), bodovi(bodovi) {}
+
+    string getIme() const {
+        return ime;
+    }
+
+    bool prolazi() const {
+        if (bodovi >= 50) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
+
+int main() {
+    Student s("Ana", 62);
+    if (s.prolazi()) {
+        cout << s.getIme() << " prolazi" << endl;
+    }
+    return 0;
+}
+`;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+let diags = [], paper = store.get('cpp.paper', false), busy = false, sampleP;
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function wrap(cls, t) { return t.split('\n').map(p => p ? `<span class="${cls}">${esc(p)}</span>` : '').join('\n'); }
+
+function hl(src) {
+  if (paper) return wrap('o', src);
+  const cls = new Set();
+  src.replace(/\b(?:class|struct)\s+([A-Za-z_]\w*)/g, (m, n) => { cls.add(n); return m; });
+  const re = /(\/\/[^\n]*)|(\/\*[\s\S]*?(?:\*\/|$))|("(?:\\.|[^"\\\n])*"?)|('(?:\\.|[^'\\\n])*'?)|(^[ \t]*#[^\n]*)|(\b\d[\w.']*)|([A-Za-z_]\w*)/gm;
+  let out = '', last = 0, m;
+  while ((m = re.exec(src))) {
+    out += wrap('o', src.slice(last, m.index));
+    last = re.lastIndex;
+    const t = m[0];
+    if (m[1] || m[2]) {
+      out += wrap('m', t);
+    } else if (m[3] || m[4]) {
+      out += wrap('s', t);
+    } else if (m[5]) {
+      const q = t.match(/^([ \t]*#\s*\w*)(\s*)(<[^>\n]*>?|"[^"\n]*"?)?([\s\S]*)$/);
+      out += wrap('p', q[1]) + wrap('o', q[2]) + (q[3] ? wrap('s', q[3]) : '') + wrap('p', q[4]);
+    } else if (m[6]) {
+      out += wrap('n', t);
+    } else {
+      const next = src.substr(last, 40);
+      let c = 'v';
+      if (KW.has(t)) c = 'k';
+      else if (CT.has(t)) c = 'c';
+      else if (TY.has(t) || cls.has(t)) c = 't';
+      else if (/^\s*\(/.test(next)) c = 'f';
+      else if (/^[A-Z]/.test(t) && /^\s*[\w&*<]/.test(next)) c = 't';
+      out += wrap(c, t);
+    }
+  }
+  out += wrap('o', src.slice(last));
+  return out;
+}
+
+function render() {
+  const v = ta.value;
+  const lines = hl(v).split('\n');
+  const em = {};
+  for (const d of diags) {
+    const l = d.line | 0;
+    if (l > 0) {
+      if (d.severity === 'error') em[l] = 'e';
+      else if (!em[l]) em[l] = 'w';
+    }
+  }
+  hlin.innerHTML = lines.map((l, i) => `<div class="L ${em[i + 1] || ''}">${l || ' '}</div>`).join('');
+  gutin.innerHTML = lines.map((l, i) => `<div class="${em[i + 1] || ''}">${i + 1}</div>`).join('');
+  sync();
+  caret();
+  store.set('cpp.code', v);
+}
+
+function sync() {
+  hlin.style.transform = `translate(${-ta.scrollLeft}px,${-ta.scrollTop}px)`;
+  gutin.style.transform = `translateY(${-ta.scrollTop}px)`;
+  caret();
+}
+
+let curLn = 0;
+function caret() {
+  const pos = ta.selectionStart;
+  const before = ta.value.slice(0, pos);
+  const ln = before.split('\n').length;
+  const col = pos - before.lastIndexOf('\n');
+  $('#lc').textContent = `Ln ${ln}, Col ${col}`;
+  cur.style.top = (PAD + (ln - 1) * LH - ta.scrollTop) + 'px';
+  const g = gutin.children;
+  if (g[curLn - 1]) g[curLn - 1].classList.remove('cur');
+  if (g[ln - 1]) g[ln - 1].classList.add('cur');
+  curLn = ln;
+}
+
+function ins(t) {
+  ta.focus();
+  let ok = false;
+  try { ok = document.execCommand('insertText', false, t); } catch (e) { ok = false; }
+  if (!ok) {
+    ta.setRangeText(t, ta.selectionStart, ta.selectionEnd, 'end');
+    render();
+  }
+}
+
+ta.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); build(); return; }
+  if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) { e.preventDefault(); ins('    '); return; }
+  if (paper) return;
+  const s = ta.selectionStart, v = ta.value;
+  const ls = v.lastIndexOf('\n', s - 1) + 1;
+  const lineBefore = v.slice(ls, s);
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    const ind = lineBefore.match(/^[ \t]*/)[0];
+    const open = /\{\s*$/.test(lineBefore);
+    const close = v.charAt(ta.selectionEnd) === '}';
+    if (open && close) {
+      ins('\n' + ind + '    ' + '\n' + ind);
+      const p = ta.selectionStart - (ind.length + 1);
+      ta.setSelectionRange(p, p);
+      caret();
+    } else if (open) {
+      ins('\n' + ind + '    ');
+    } else {
+      ins('\n' + ind);
+    }
+    return;
+  }
+  if (e.key === '}' && ta.selectionStart === ta.selectionEnd && /^ {4,}$/.test(lineBefore)) {
+    e.preventDefault();
+    ta.setSelectionRange(s - 4, s);
+    ins('}');
+  }
+});
+ta.addEventListener('input', render);
+ta.addEventListener('scroll', sync);
+ta.addEventListener('click', caret);
+ta.addEventListener('keyup', caret);
+document.addEventListener('selectionchange', () => { if (document.activeElement === ta) caret(); });
+
+function goLine(n) {
+  const lines = ta.value.split('\n');
+  let p = 0;
+  for (let i = 0; i < n - 1 && i < lines.length; i++) p += lines[i].length + 1;
+  ta.focus();
+  ta.setSelectionRange(p, p);
+  ta.scrollTop = Math.max(0, (n - 1) * LH - ta.clientHeight / 3);
+  sync();
+}
+
+function tab(id) {
+  for (const b of document.querySelectorAll('.tabs button')) {
+    const on = b.dataset.p === id;
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+    $('#' + b.dataset.p).hidden = !on;
+  }
+}
+for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => tab(b.dataset.p));
+
+function setPaper(on) {
+  paper = on;
+  store.set('cpp.paper', on);
+  $('#app').classList.toggle('paper', on);
+  $('#paperBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
+  $('#pst').textContent = on ? 'uključen' : 'isključen';
+  render();
+}
+$('#paperBtn').addEventListener('click', () => setPaper(!paper));
+
+let clearArm = 0;
+$('#clear').addEventListener('click', () => {
+  const b = $('#clear');
+  if (Date.now() - clearArm < 3000) {
+    ta.value = '#include <iostream>\nusing namespace std;\n\n';
+    diags = [];
+    fillErrors(null);
+    render();
+    ta.focus();
+    b.textContent = 'Očisti kôd';
+    clearArm = 0;
+  } else {
+    clearArm = Date.now();
+    b.textContent = 'Sigurno? Klikni opet';
+    setTimeout(() => { b.textContent = 'Očisti kôd'; }, 3000);
+  }
+});
+
+const strip = t => String(t || '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+const joinText = arr => (arr || []).map(x => strip(x.text)).join('\n');
+
+const HINTS = [
+  [/expected ['‘]?;['’]? after class definition/, 'Nedostaje ; iza zatvorene } klase. Klasika na papiru.', 'nedostaje ; iza klase'],
+  [/expected ['‘]?;['’]? before/, 'Fali ; na kraju naredbe. Često je greška zapravo red iznad.', 'nedostaje ;'],
+  [/expected ['‘]?\}['’]? at end of input/, 'Neka { nije zatvorena. Prebroji vitičaste zagrade.', 'nezatvorena {'],
+  [/expected ['‘]?\)['’]?/, 'Fali zatvorena zagrada ).', 'nedostaje )'],
+  [/was not declared in this scope/, 'Ime nije deklarirano: tipfeler, fali #include ili using namespace std, ili je varijabla izvan dosega.', 'nedeklarirano ime'],
+  [/does not name a type/, 'Tip nije poznat: fali #include (npr. <string>), std:: ili koristiš klasu prije nego što je definirana.', 'nepoznat tip'],
+  [/is private within this context/, 'Pristupaš private članu izvan klase. Koristi getter ili public metodu.', 'pristup private članu'],
+  [/no matching function for call to/, 'Nema funkcije ili konstruktora s takvim parametrima. Provjeri broj i tipove argumenata, ili fali default konstruktor.', 'krivi poziv / fali konstruktor'],
+  [/no match for ['‘]operator/, 'Operator nije definiran za taj tip. Treba ga preopteretiti (npr. operator<< kao friend funkciju).', 'fali preopterećenje operatora'],
+  [/discards qualifiers/, 'Zoveš ne-const metodu na const objektu. Dodaj const iza metode, npr. int getX() const.', 'fali const na metodi'],
+  [/cannot convert|invalid conversion/, 'Krivi tip: šalješ ili vraćaš nešto što se ne može pretvoriti u traženi tip.', 'krivi tip'],
+  [/redefinition of|redeclared/, 'Isto ime je definirano dvaput.', 'dvostruka definicija'],
+  [/expected primary-expression/, 'Nešto fali ili je višak u izrazu, npr. tip tamo gdje treba vrijednost.', 'neispravan izraz'],
+  [/invalid use of non-static/, 'Koristiš običan član bez objekta (npr. u static metodi ili kao Klasa::atribut).', 'član bez objekta'],
+  [/control reaches end of non-void function|no return statement/, 'Funkcija mora vratiti vrijednost u svim granama.', 'fali return'],
+  [/unused variable/, 'Varijabla je deklarirana, ali se nigdje ne koristi.', 'nekorištena varijabla'],
+  [/unused parameter/, 'Parametar se ne koristi u funkciji.', 'nekorišten parametar'],
+  [/different signedness/, 'Uspoređuješ int i unsigned (npr. i < v.size()). Koristi size_t.', 'signed/unsigned usporedba'],
+  [/used uninitialized/, 'Varijabla se koristi prije nego što dobije vrijednost.', 'neinicijalizirana varijabla'],
+  [/undefined reference to/, 'Metoda je deklarirana, ali nigdje nije napisana (fali tijelo, npr. destruktora ili Klasa::metoda).', 'fali definicija metode'],
+  [/will be initialized after/, 'Redoslijed u inicijalizacijskoj listi nije isti kao redoslijed atributa u klasi.', 'redoslijed init liste'],
+  [/has no member named/, 'Klasa nema član s tim imenom: tipfeler ili ga nisi dodao.', 'nepostojeći član'],
+  [/return type specification for constructor/, 'Konstruktor nema povratni tip, ni void.', 'tip na konstruktoru'],
+  [/extra qualification/, 'Unutar klase ne pišeš Klasa:: ispred metode.', 'višak Klasa::'],
+  [/expected unqualified-id|expected declaration/, 'Nešto je na krivom mjestu, često višak ; ili }.', 'sintaksa'],
+  [/stray ['‘]/, 'Čudan znak u kodu, često navodnici kopirani iz Worda ili PDF-a.', 'nevaljan znak'],
+  [/abstract type|pure virtual/, 'Ne možeš napraviti objekt apstraktne klase. Izvedena klasa mora implementirati sve čiste virtualne metode.', 'apstraktna klasa'],
+  [/delete.*(array|\[\])|mismatched-new-delete/, 'new[] ide s delete[], a new s delete.', 'krivi delete']
+];
+function hint(msg) {
+  for (const h of HINTS) {
+    if (h[0].test(msg)) return { hr: h[1], cat: h[2] };
+  }
+  return { hr: '', cat: msg.replace(/[‘'][^’']*[’']/g, '‘…’').slice(0, 80) };
+}
+
+function parse(text) {
+  const res = [];
+  const re = /^(?:<source>|[^\s:]*\.(?:cc|cpp)):(\d+):(\d+):\s*(fatal error|error|warning|note):\s*(.*)$/;
+  for (const l of text.split('\n')) {
+    const m = re.exec(l);
+    if (m) {
+      if (m[3] === 'note') continue;
+      const h = hint(m[4]);
+      res.push({ line: +m[1], col: +m[2], severity: m[3] === 'warning' ? 'warning' : 'error', message: m[4], hr: h.hr, cat: h.cat });
+    } else if (/undefined reference to/.test(l)) {
+      const msg = l.replace(/^.*?(?=undefined reference)/, '');
+      const h = hint(msg);
+      res.push({ line: 0, col: 0, severity: 'error', message: msg, hr: h.hr, cat: h.cat });
+    }
+  }
+  return res;
+}
+
+let ceId = null;
+async function ceCompiler() {
+  if (ceId) return ceId;
+  ceId = 'g142';
+  try {
+    const r = await fetch('https://godbolt.org/api/compilers/c++?fields=id,name', { headers: { Accept: 'application/json' } });
+    const list = await r.json();
+    let best = 0;
+    for (const c of list) {
+      const m = /^x86-64 gcc (\d+)\.(\d+)(?:\.(\d+))?$/.exec(c.name || '');
+      if (m) {
+        const score = Number(m[1]) * 10000 + Number(m[2]) * 100 + Number(m[3] || 0);
+        if (score > best) {
+          best = score;
+          ceId = c.id;
+        }
+      }
+    }
+  } catch (e) {}
+  return ceId;
+}
+
+async function compileCE(code, stdin) {
+  const id = await ceCompiler();
+  const body = {
+    source: code,
+    lang: 'c++',
+    options: {
+      userArguments: '-std=c++17 -Wall -Wextra',
+      executeParameters: { args: [], stdin: stdin },
+      compilerOptions: { executorRequest: true },
+      filters: { execute: true },
+      tools: [],
+      libraries: []
+    },
+    allowStoreCodeDebug: false
+  };
+  const r = await fetch(`https://godbolt.org/api/compiler/${id}/compile`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('Compiler Explorer HTTP ' + r.status);
+  const j = await r.json();
+  const b = j.buildResult || j;
+  const built = (b.code | 0) === 0;
+  return { name: 'g++ na Compiler Exploreru (' + id + ')', diag: joinText(b.stderr), built: built, ran: built && !!j.didExecute, out: joinText(j.stdout), err: joinText(j.stderr), code: j.code | 0 };
+}
+
+async function compileWB(code, stdin) {
+  const body = { compiler: 'gcc-head', code: code, stdin: stdin, options: 'warning', 'compiler-option-raw': '-std=c++17\n-Wextra', save: false };
+  const r = await fetch('https://wandbox.org/api/compile.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('Wandbox HTTP ' + r.status);
+  const j = await r.json();
+  const diag = strip(j.compiler_error || '');
+  const built = !/(^|\n)[^\n]*(error|Error):/.test(diag) && !/collect2|ld returned/.test(diag);
+  return { name: 'g++ (gcc-head) na Wandboxu', diag: diag, built: built, ran: built, out: strip(j.program_output || ''), err: strip(j.program_error || ''), code: Number(j.status) || 0 };
+}
+
+
+const out = $('#out');
+function outLine(t, cls) {
+  const d = document.createElement('span');
+  if (cls) d.className = cls;
+  d.textContent = t + '\n';
+  out.appendChild(d);
+}
+
+function fillErrors(list) {
+  const tb = $('#elist');
+  tb.textContent = '';
+  const arr = list || [];
+  $('#ecount').textContent = arr.filter(d => d.severity === 'error').length;
+  $('#eempty').hidden = list !== null && arr.length > 0 ? true : false;
+  $('#eempty').textContent = list === null ? 'Još nema provjere. Napiši kôd pa klikni „Gotov sam — kompajliraj”.' : 'Nema grešaka ni upozorenja. Bravo.';
+  for (const d of arr) {
+    const tr = document.createElement('tr');
+    const t1 = document.createElement('td');
+    const ic = document.createElement('span');
+    if (d.severity === 'error') {
+      ic.className = 'ic';
+      ic.textContent = '×';
+    } else {
+      ic.className = 'ic w';
+      ic.textContent = '!';
+    }
+    t1.appendChild(ic);
+    const t2 = document.createElement('td');
+    const m = document.createElement('div');
+    m.className = 'msg';
+    m.textContent = d.message || '';
+    const h = document.createElement('div');
+    h.className = 'hr';
+    h.textContent = d.hr || '';
+    t2.append(m, h);
+    const t3 = document.createElement('td');
+    t3.className = 'ln';
+    t3.textContent = d.line ? String(d.line | 0) : '';
+    tr.append(t1, t2, t3);
+    tr.addEventListener('click', () => { if (d.line) goLine(d.line | 0); });
+    tb.appendChild(tr);
+  }
+}
+
+function renderLog() {
+  const log = store.get('cpp.log', {});
+  const ul = $('#logl');
+  ul.textContent = '';
+  const ks = Object.keys(log).sort((a, b) => log[b] - log[a]);
+  if (!ks.length) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--dim)';
+    li.textContent = 'Ovdje se skupljaju greške koje radiš, da ih prođeš dan prije kolokvija.';
+    ul.appendChild(li);
+  }
+  for (const k of ks) {
+    const li = document.createElement('li');
+    const b = document.createElement('b');
+    b.textContent = log[k] + '×';
+    const s = document.createElement('span');
+    s.textContent = k;
+    li.append(b, s);
+    ul.appendChild(li);
+  }
+}
+$('#logclr').addEventListener('click', () => { store.set('cpp.log', {}); renderLog(); });
+
+async function compileWith(eng, code, stdin) {
+  if (eng === 'ce') {
+    return compileCE(code, stdin);
+  } else {
+    return compileWB(code, stdin);
+  }
+}
+
+async function build() {
+  if (busy) return;
+  const code = ta.value;
+  if (!code.trim()) return;
+  busy = true;
+  $('#build').disabled = true;
+  $('#st').textContent = 'Kompajliram…';
+  tab('pout');
+  out.textContent = '';
+  outLine(`Build started at ${new Date().toLocaleTimeString('hr-HR')}...`, 'd');
+  outLine('1>------ Build started: Project: Kolokvij, Configuration: Debug x64 ------', 'd');
+  const stdin = $('#stdin').value;
+  let eng = $('#eng').value;
+  try {
+    let r;
+    try {
+      r = await compileWith(eng, code, stdin);
+    } catch (e1) {
+      outLine((eng === 'ce' ? 'Compiler Explorer' : 'Wandbox') + ' ne odgovara, probam drugi kompajler…', 'd');
+      if (eng === 'ce') {
+        eng = 'wb';
+      } else {
+        eng = 'ce';
+      }
+      r = await compileWith(eng, code, stdin);
+    }
+    outLine('1>' + r.name, 'd');
+    outLine('1>Kolokvij.cpp', 'd');
+    for (const l of r.diag.split('\n')) {
+      if (!l.trim()) continue;
+      const t = l.replace(/^(<source>|prog\.cc)/, 'Kolokvij.cpp');
+      outLine('1>' + t, /error/.test(l) ? 'bad' : '');
+    }
+    diags = parse(r.diag);
+    if (!r.built && !diags.some(d => d.severity === 'error')) {
+      diags.push({ line: 0, col: 0, severity: 'error', message: 'Build nije uspio, detalji su u Izlazu.', hr: '', cat: '' });
+    }
+    const nErr = diags.filter(d => d.severity === 'error').length;
+    const nWarn = diags.length - nErr;
+    outLine(`1>${nErr} error(s), ${nWarn} warning(s)`, r.built ? 'd' : 'bad');
+    outLine(`========== Build: ${r.built ? 1 : 0} succeeded, ${r.built ? 0 : 1} failed ==========`, r.built ? 'ok' : 'bad');
+    if (r.built) {
+      outLine('');
+      if (r.ran) {
+        outLine('Pokrećem Kolokvij.exe…', 'd');
+        const p = document.createElement('span');
+        p.className = 'prog';
+        p.textContent = r.out ? r.out : '(program nije ništa ispisao)';
+        out.appendChild(p);
+        if (r.err.trim()) outLine(r.err, 'bad');
+        outLine(`Program je završio s kodom ${r.code}.`, r.code === 0 ? 'd' : 'bad');
+      } else {
+        outLine('Kompajlirano, ali pokretanje trenutno nije dostupno. Probaj drugi kompajler gore u alatnoj traci.', 'd');
+      }
+    }
+    fillErrors(diags);
+    const log = store.get('cpp.log', {});
+    for (const d of diags) {
+      if (d.severity !== 'error' || !d.cat) continue;
+      log[d.cat] = (log[d.cat] || 0) + 1;
+    }
+    store.set('cpp.log', log);
+    renderLog();
+    render();
+    if (!r.built) tab('perr');
+    $('#st').textContent = r.built ? 'Build uspio' : 'Build nije uspio';
+  } catch (e) {
+    outLine('Nijedan kompajler ne odgovara. Provjeri internet pa probaj opet' + (e && e.message ? ' (' + e.message + ').' : '.'), 'bad');
+    $('#st').textContent = 'Spremno';
+  } finally {
+    busy = false;
+    $('#build').disabled = false;
+  }
+}
+$('#build').addEventListener('click', build);
+
+
+$('#task').addEventListener('input', () => { store.set('cpp.task', $('#task').value); });
+$('#stdin').addEventListener('input', () => { store.set('cpp.stdin', $('#stdin').value); });
+
+let t0 = store.get('cpp.t0', Date.now());
+store.set('cpp.t0', t0);
+const tick = () => {
+  const s = Math.floor((Date.now() - t0) / 1000);
+  const h = Math.floor(s / 3600), mi = Math.floor((s % 3600) / 60), se = s % 60;
+  $('#tm').textContent = 'Vrijeme: ' + (h ? h + ':' + String(mi).padStart(2, '0') : mi) + ':' + String(se).padStart(2, '0');
+};
+$('#tm').addEventListener('click', () => { t0 = Date.now(); store.set('cpp.t0', t0); tick(); });
+setInterval(tick, 1000);
+
+ta.value = store.get('cpp.code', START);
+$('#task').value = store.get('cpp.task', '');
+$('#stdin').value = store.get('cpp.stdin', '');
+$('#eng').value = store.get('cpp.eng', 'ce');
+$('#eng').addEventListener('change', () => { store.set('cpp.eng', $('#eng').value); });
+fillErrors(null);
+renderLog();
+setPaper(paper);
+tick();
+window.addEventListener('resize', sync);
+}
+</script>
+</body>
+</html>
